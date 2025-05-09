@@ -7,7 +7,14 @@ import { Env } from './lib/types';
 import { formatDate } from './lib/utils';
 
 // Log timezone configuration
-console.log(`Using timezone: ${env.timezone}`);
+if (env.timezone) {
+  console.log(`Using timezone: ${env.timezone}`);
+}
+
+// Log request timeout configuration
+if (env.requestTimeout > 0) {
+  console.log(`Using request timeout: ${env.requestTimeout}ms`);
+}
 
 // Get all environment variables with validation
 const jobs = getAllEnv();
