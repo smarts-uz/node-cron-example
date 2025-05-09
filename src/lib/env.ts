@@ -53,10 +53,21 @@ const RunOnStartSchema = z
   .optional()
   .default('false');
 
+// Validation schema for REQUEST_TIMEOUT
+const RequestTimeoutSchema = z
+  .string()
+  .optional()
+  .transform((val) => {
+    if (!val) return 60000; // Default to 60000ms (1 minute)
+    const parsed = parseInt(val, 10);
+    return isNaN(parsed) ? 60000 : parsed;
+  });
+
 // Export validated environment variables
 export const env = {
   timezone: TimezoneSchema.parse(process.env.TIMEZONE || 'UTC'),
   runOnStart: RunOnStartSchema.parse(process.env.RUN_ON_START),
+  requestTimeout: RequestTimeoutSchema.parse(process.env.REQUEST_TIMEOUT),
 };
 
 export function getAllEnv() {

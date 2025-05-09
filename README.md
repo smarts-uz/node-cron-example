@@ -41,11 +41,12 @@ You can easily self-host this scheduler or deploy it in seconds using my Railway
 
 The following environment variables are supported:
 
-| Variable     | Required | Description                               | Example                                          |
-| ------------ | -------- | ----------------------------------------- | ------------------------------------------------ |
-| TIMEZONE     | No       | IANA timezone name (defaults to UTC)      | `TIMEZONE="America/New_York"`                    |
-| RUN_ON_START | No       | Run jobs on startup (defaults to `false`) | `RUN_ON_START="false"`                           |
-| JOB{n}       | Yes      | Cron job configuration (see below)        | `JOB1="* * * * *::GET::https://api.example.com"` |
+| Variable        | Required | Description                                                                 | Example                                          |
+| --------------- | -------- | --------------------------------------------------------------------------- | ------------------------------------------------ |
+| TIMEZONE        | No       | IANA timezone name (defaults to UTC)                                        | `TIMEZONE="America/New_York"`                    |
+| RUN_ON_START    | No       | Run jobs on startup (defaults to `false`)                                   | `RUN_ON_START="false"`                           |
+| REQUEST_TIMEOUT | No       | Request timeout in milliseconds (default: 60000 = 1 minute, 0 = no timeout) | `REQUEST_TIMEOUT="30000"`                        |
+| JOB{n}          | Yes      | Cron job configuration (see below)                                          | `JOB1="* * * * *::GET::https://api.example.com"` |
 
 #### Important notes
 

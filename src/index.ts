@@ -25,11 +25,20 @@ jobs.forEach((job) => {
 // Wrapper function to handle the process for a specific job
 async function performCronJob(job: Env) {
   try {
+    // Create an AbortController with the configured timeout
+    const controller = new AbortController();
+
+    // If timeout is 0, it means no timeout
+    if (env.requestTimeout > 0) {
+      setTimeout(() => controller.abort(), env.requestTimeout);
+    }
+
     const options: RequestInit = {
       method: job.method,
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
     };
 
     // Add body for non-GET requests if props exist
@@ -49,8 +58,15 @@ async function performCronJob(job: Env) {
         'YYYY-MM-DD HH:MM'
       )}`
     );
-  } catch (error) {
-    console.error(`❌ Error during process for Job ${job.id}:`, error);
+  } catch (error: unknown) {
+    // Check if it's an abort error
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error(
+        `❌ Request for Job ${job.id} timed out after ${env.requestTimeout}ms`
+      );
+    } else {
+      console.error(`❌ Error during process for Job ${job.id}:`, error);
+    }
   }
 }
 
