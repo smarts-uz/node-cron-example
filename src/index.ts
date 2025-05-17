@@ -1,6 +1,7 @@
 import { format } from 'path';
 
 import * as cron from 'node-cron';
+import mysql from 'mysql2/promise';
 
 import { getAllEnv, env } from './lib/env';
 import { Env } from './lib/types';
@@ -29,81 +30,79 @@ jobs.forEach((job) => {
   );
 });
 
-// Wrapper function to handle the process for a specific job
-async function performCronJob(job: Env) {
+async function performMariaDBJob(job: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  query: string;
+}) {
   try {
-    // Create an AbortController with the configured timeout
-    const controller = new AbortController();
+    const connection = await mysql.createConnection({
+      host: job.host,
+      port: job.port,
+      user: job.user,
+      password: job.password,
+      database: job.database
+    });
 
-    // If timeout is 0, it means no timeout
-    if (env.requestTimeout > 0) {
-      setTimeout(() => controller.abort(), env.requestTimeout);
-    }
+    console.log(`Executing query: ${job.query}`);
+    const [results] = await connection.execute(job.query);
+    console.log('Query results:', results);
 
-    const options: RequestInit = {
-      method: job.method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-    };
-
-    // Add body for non-GET requests if props exist
-    if (job.method !== 'GET' && job.props) {
-      options.body = JSON.stringify(job.props);
-    }
-
-    const response = await fetch(job.url, options);
-    const status = response.status;
-    const now = new Date();
-
-    console.log(
-      `\n✅ Process for job ${job.id} completed\nMade ${job.method} request to: ${
-        job.url
-      }\nProps: ${JSON.stringify(job.props)}\nResponse status: ${status}\nCompleted at: ${formatDate(
-        now,
-        'YYYY-MM-DD HH:MM'
-      )}`
-    );
-  } catch (error: unknown) {
-    // Check if it's an abort error
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.error(
-        `❌ Request for Job ${job.id} timed out after ${env.requestTimeout}ms`
-      );
-    } else {
-      console.error(`❌ Error during process for Job ${job.id}:`, error);
-    }
+    await connection.end();
+  } catch (error) {
+    console.error('Error executing MariaDB job:', error);
   }
 }
 
-// New line
-console.log('');
+async function main() {
+  const jobs = getAllEnv();
+  console.log(`Using timezone: ${env.timezone}`);
+  console.log(`Using request timeout: ${env.requestTimeout}ms`);
 
-// Schedule each job
-jobs.forEach((job) => {
-  // Validate cron schedule
-  if (!cron.validate(job.schedule)) {
-    console.error(`Invalid cron schedule for Job ${job.id}: ${job.schedule}`);
-    return; // Skip this job
+  for (const job of jobs) {
+    console.log(`Processing job: ${JSON.stringify(job)}`);
+
+    if (job.method === 'MARIADB') {
+      const url = new URL(job.url);
+      const schedule = job.schedule;
+
+      const username = url.searchParams.get('username');
+      const password = url.searchParams.get('password');
+      const query = url.searchParams.get('query');
+
+      console.log(`Scheduling MariaDB Job with cron: ${schedule}`);
+
+      if (env.runOnStart) {
+        console.log('Running Job on startup...');
+        await performMariaDBJob({
+          host: url.hostname,
+          port: parseInt(url.port || '3306'),
+          database: url.pathname.replace(/^\//, ''),
+          user: username || '',
+          password: password || '',
+          query: query || ''
+        });
+      }
+
+      cron.schedule(schedule, async () => {
+        await performMariaDBJob({
+          host: url.hostname,
+          port: parseInt(url.port || '3306'),
+          database: url.pathname.replace(/^\//, ''),
+          user: username || '',
+          password: password || '',
+          query: query || ''
+        });
+      }, {
+        timezone: env.timezone
+      });
+    }
   }
 
-  // Schedule the task
-  console.log(`Scheduling Job ${job.id} with cron: ${job.schedule}`);
-  cron.schedule(job.schedule, () => performCronJob(job), {
-    scheduled: true,
-    timezone: env.timezone,
-  });
+  console.log('All jobs scheduled successfully. Waiting for cron schedules to trigger...');
+}
 
-  // Optional: Run on startup if configured
-  if (env.runOnStart) {
-    console.log(`Running Job ${job.id} on startup...`);
-    performCronJob(job).catch((error) => {
-      console.error(`Failed to run initial job ${job.id}:`, error);
-    });
-  }
-});
-
-console.log(
-  '\nAll jobs scheduled successfully. Waiting for cron schedules to trigger...'
-);
+main().catch(console.error);

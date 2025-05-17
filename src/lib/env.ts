@@ -1,11 +1,12 @@
 import * as dotenv from 'dotenv';
 import * as cron from 'node-cron';
 import { z } from 'zod';
+import { Method } from './types';
 
 dotenv.config();
 
 // Validation schema for HTTP methods
-const HttpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']);
+const HttpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'MARIADB']);
 
 // Validation schema for cron schedule
 const CronScheduleSchema = z
@@ -15,8 +16,19 @@ const CronScheduleSchema = z
   });
 
 // Validation schema for URL
-const UrlSchema = z.string().url({
-  message: 'Invalid URL format',
+const UrlSchema = z.string().refine((url) => {
+  try {
+    // Standart URL va MARIADB URL formatlarini qo'llab-quvvatlash
+    if (url.startsWith('mariadb://') || url.startsWith('http://') || url.startsWith('https://')) {
+      return true;
+    }
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}, {
+  message: 'Invalid URL or MariaDB connection format',
 });
 
 // Validation schema for props
@@ -109,21 +121,25 @@ export function getAllEnv() {
         const validatedJob = JobSchema.parse({
           id: i + 1,
           schedule,
-          method: method as z.infer<typeof HttpMethodSchema>,
+          method: method === 'MARIADB' ? 'POST' : method,
           url,
           props: Object.keys(props).length > 0 ? props : undefined,
         });
 
-        envList.push(validatedJob);
+        envList.push({
+          ...validatedJob,
+          method: method as Method, // Metodni orijinal qiymatida saqlab qolamiz
+        });
       } catch (error: unknown) {
         if (error instanceof z.ZodError) {
           console.error(`Validation error for ${jobId}:`, error.errors);
+          // Xatolikni ko'rsatib, dasturni to'xtatmasdan davom ettiramiz
+          continue;
         } else if (error instanceof Error) {
           console.error(`Error processing ${jobId}:`, error.message);
         } else {
           console.error(`Unknown error processing ${jobId}:`, error);
         }
-        process.exit(1);
       }
 
       i++;
